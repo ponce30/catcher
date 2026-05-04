@@ -4,11 +4,12 @@ const DATA_DIR = 'data';
 const PAT_KEY = 'catcher:pat';
 
 const COLUMN_MAP = [
-  { src: 'Rk',          dst: 'Rk',          type: 'num' },
-  { src: 'Player',      dst: 'Player',      type: 'str' },
-  { src: 'EXC (min)',   dst: 'EXC (最速)',   type: 'num' },
-  { src: 'ARM (max)',   dst: 'ARM (最速)',   type: 'num' },
-  { src: 'POP2B (min)', dst: 'POP2B (最速)', type: 'num' },
+  { dst: 'Rk',          src: null,     type: 'num', agg: 'rank' },
+  { dst: 'Player',      src: 'Player', type: 'str', agg: 'first' },
+  { dst: 'Team',        src: 'Team',   type: 'str', agg: 'first' },
+  { dst: 'ARM (最速)',   src: 'ARM',    type: 'num', agg: 'max',  matchPrefix: true },
+  { dst: 'POP2B (最速)', src: 'POP2B',  type: 'num', agg: 'min',  matchPrefix: true },
+  { dst: 'EXC (最速)',   src: 'EXC',    type: 'num', agg: 'min',  matchPrefix: true },
 ];
 
 let currentRows = [];
@@ -36,25 +37,93 @@ function parseCSV(text) {
   return lines.filter(r => r.some(v => v !== ''));
 }
 
+function findColIdx(headers, src, matchPrefix) {
+  if (!src) return -1;
+  let idx = headers.indexOf(src);
+  if (idx < 0 && matchPrefix) {
+    idx = headers.findIndex(h => h === src || h.startsWith(src + ' ') || h.startsWith(src + '('));
+  }
+  return idx;
+}
+
 function csvToRows(text) {
   const lines = parseCSV(text);
   if (lines.length === 0) return [];
   const headers = lines[0].map(h => h.trim());
-  const idxs = COLUMN_MAP.map(c => headers.indexOf(c.src));
-  const missing = COLUMN_MAP.filter((c, j) => idxs[j] < 0).map(c => c.src);
-  if (missing.length > 0) {
-    console.warn('未検出の列:', missing);
+
+  const idxs = {};
+  for (const c of COLUMN_MAP) {
+    idxs[c.dst] = findColIdx(headers, c.src, c.matchPrefix);
   }
-  const rows = [];
+  const missing = COLUMN_MAP.filter(c => c.src && idxs[c.dst] < 0).map(c => c.src);
+  if (missing.length > 0) console.warn('未検出の列:', missing);
+
+  const rawRows = [];
   for (let i = 1; i < lines.length; i++) {
     const row = {};
-    COLUMN_MAP.forEach((c, j) => {
-      const idx = idxs[j];
-      row[c.dst] = idx >= 0 ? (lines[i][idx] ?? '') : '';
-    });
-    rows.push(row);
+    for (const c of COLUMN_MAP) {
+      if (!c.src) continue;
+      const idx = idxs[c.dst];
+      row[c.dst] = idx >= 0 ? (lines[i][idx] ?? '').trim() : '';
+    }
+    rawRows.push(row);
   }
-  return rows;
+
+  // POP2B (SEC) のマイナスや欠損はエラー扱いで除外
+  const popDst = 'POP2B (最速)';
+  const validRows = rawRows.filter(r => {
+    const v = parseFloat(r[popDst]);
+    return !isNaN(v) && v >= 0;
+  });
+
+  // Player単位でグループ化 → 各項目のトップタイムへ集約
+  const groups = new Map();
+  for (const r of validRows) {
+    const p = r['Player'];
+    if (!p) continue;
+    if (!groups.has(p)) groups.set(p, []);
+    groups.get(p).push(r);
+  }
+
+  const aggregated = [];
+  for (const [, rows] of groups) {
+    const agg = {};
+    for (const c of COLUMN_MAP) {
+      if (c.agg === 'rank') continue;
+      if (c.agg === 'first') {
+        const v = rows.map(r => r[c.dst]).find(x => x !== '' && x != null);
+        agg[c.dst] = v ?? '';
+      } else if (c.agg === 'min') {
+        let best = Infinity, bestStr = '';
+        for (const r of rows) {
+          const n = parseFloat(r[c.dst]);
+          if (!isNaN(n) && n < best) { best = n; bestStr = r[c.dst]; }
+        }
+        agg[c.dst] = bestStr;
+      } else if (c.agg === 'max') {
+        let best = -Infinity, bestStr = '';
+        for (const r of rows) {
+          const n = parseFloat(r[c.dst]);
+          if (!isNaN(n) && n > best) { best = n; bestStr = r[c.dst]; }
+        }
+        agg[c.dst] = bestStr;
+      }
+    }
+    aggregated.push(agg);
+  }
+
+  // Rk = POP2B (最速) 昇順順位
+  const ordered = [...aggregated].sort((a, b) => {
+    const va = parseFloat(a[popDst]);
+    const vb = parseFloat(b[popDst]);
+    if (isNaN(va) && isNaN(vb)) return 0;
+    if (isNaN(va)) return 1;
+    if (isNaN(vb)) return -1;
+    return va - vb;
+  });
+  ordered.forEach((r, i) => { r['Rk'] = String(i + 1); });
+
+  return aggregated;
 }
 
 function sortRows() {
