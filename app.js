@@ -12,6 +12,9 @@ const COLUMN_MAP = [
   { dst: 'EXC (最速)',   src: 'EXC',    type: 'num', agg: 'min',  matchPrefix: true },
 ];
 
+// POP2B (SEC) がこの値以下の行は計測エラー(マイナス・文字化け・異常な高速値)として除外
+const POP_MIN_VALID = 1.70;
+
 let currentRows = [];
 let sortState = { col: 'POP2B (最速)', dir: 'asc' };
 
@@ -69,11 +72,11 @@ function csvToRows(text) {
     rawRows.push(row);
   }
 
-  // POP2B (SEC) のマイナスや欠損はエラー扱いで除外
+  // POP2B (SEC) のマイナス・欠損・1.70以下は計測エラー扱いで行ごと除外
   const popDst = 'POP2B (最速)';
   const validRows = rawRows.filter(r => {
     const v = parseFloat(r[popDst]);
-    return !isNaN(v) && v >= 0;
+    return !isNaN(v) && v > POP_MIN_VALID;
   });
 
   // Player単位でグループ化 → 各項目のトップタイムへ集約

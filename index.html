@@ -17,7 +17,7 @@
       <p>📁 CSVファイルをここにドロップ</p>
       <p>または <input type="file" id="fileInput" accept=".csv"></p>
       <p class="hint">「Stat Search Results」の生CSV(英語ヘッダ)を投入 → 自動で日本語列にマッピング・保存</p>
-      <p class="hint">必要列: <code>Player, Team, ARM, POP2B (SEC), EXC</code> (生データ。<code>POP2B (SEC)</code>マイナス行は除外し、選手ごとの最速/最大値を表示)</p>
+      <p class="hint">必要列: <code>Player, Team, ARM, POP2B (SEC), EXC</code> (生データ。<code>POP2B (SEC) ≤ 1.70</code> の行は計測エラーとして除外し、選手ごとの最速/最大値を表示)</p>
     </div>
     <div class="row">
       <label>履歴:</label>
