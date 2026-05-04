@@ -72,11 +72,15 @@ function csvToRows(text) {
     rawRows.push(row);
   }
 
-  // POP2B (SEC) のマイナス・欠損・1.70以下は計測エラー扱いで行ごと除外
+  // 行ごと除外: POP2B (SEC) のマイナス・欠損・1.70以下、または Player名の文字化け
+  // 文字化け判定: ASCII A-Z/a-z (本来Player名は日本語のみ) または U+FFFD (REPLACEMENT CHAR)
   const popDst = 'POP2B (最速)';
+  const MOJIBAKE_RE = /[A-Za-z�]/;
   const validRows = rawRows.filter(r => {
     const v = parseFloat(r[popDst]);
-    return !isNaN(v) && v > POP_MIN_VALID;
+    if (isNaN(v) || v <= POP_MIN_VALID) return false;
+    if (MOJIBAKE_RE.test(r['Player'] || '')) return false;
+    return true;
   });
 
   // Player単位でグループ化 → 各項目のトップタイムへ集約
