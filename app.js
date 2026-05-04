@@ -8,8 +8,8 @@ const COLUMN_MAP = [
   { dst: 'Player',      src: 'Player', type: 'str', agg: 'first' },
   { dst: 'Team',        src: 'Team',   type: 'str', agg: 'first' },
   { dst: 'ARM (最速)',   src: 'ARM',    type: 'num', agg: 'max',  matchPrefix: true },
-  { dst: 'POP2B (最速)', src: 'POP2B',  type: 'num', agg: 'min',  matchPrefix: true },
-  { dst: 'EXC (最速)',   src: 'EXC',    type: 'num', agg: 'min',  matchPrefix: true },
+  { dst: 'POP2B (最速)', src: 'POP2B',  type: 'num', agg: 'min',  matchPrefix: true, decimals: 2 },
+  { dst: 'EXC (最速)',   src: 'EXC',    type: 'num', agg: 'min',  matchPrefix: true, decimals: 2 },
 ];
 
 // POP2B (SEC) がこの値以下の行は計測エラー(マイナス・文字化け・異常な高速値)として除外
@@ -179,8 +179,17 @@ function renderTable() {
     });
   });
   tbody.innerHTML = currentRows.map(r =>
-    '<tr>' + COLUMN_MAP.map(c => `<td>${escapeHtml(r[c.dst] ?? '')}</td>`).join('') + '</tr>'
+    '<tr>' + COLUMN_MAP.map(c => `<td>${escapeHtml(formatCell(r[c.dst], c))}</td>`).join('') + '</tr>'
   ).join('');
+}
+
+function formatCell(val, c) {
+  if (val == null || val === '') return '';
+  if (c.decimals != null) {
+    const n = parseFloat(val);
+    if (!isNaN(n)) return n.toFixed(c.decimals);
+  }
+  return val;
 }
 
 function escapeHtml(s) {
